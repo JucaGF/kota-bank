@@ -78,8 +78,14 @@ class TransactionValidatorTest {
         "12341545🐻"
     };
 
+    private static final Integer AMOUNT_LIMIT = 1_000_000;
+
     private static final Integer[] VALID_TRANSACTION_AMOUNT = {
-        1, VALID_AMOUNT, Integer.MAX_VALUE
+        1, VALID_AMOUNT, AMOUNT_LIMIT
+    };
+
+    private static final Integer[] ABOVE_LIMIT_TRANSACTION_AMOUNT = {
+        AMOUNT_LIMIT + 1, Integer.MAX_VALUE
     };
 
     private static final Integer[] INVALID_TRANSACTION_AMOUNT = {
@@ -225,6 +231,25 @@ class TransactionValidatorTest {
             assertNotNull(exceptionThrown);
             assertEquals(EXCEPTION_MESSAGE_INVALID_AMOUNT,
                 exceptionThrown.getMessage());
+        }
+    }
+
+    @Test
+    @DisplayName("Given transaction amount is above the limit, IllegalArgumentException is thrown")
+    void validationFail_WhenTransactionAmount_IsAboveLimit() {
+        for (int i = 0; i < ABOVE_LIMIT_TRANSACTION_AMOUNT.length; i++) {
+            // Given
+            when(transaction.getAmount()).thenReturn(ABOVE_LIMIT_TRANSACTION_AMOUNT[i]);
+
+            // When
+            IllegalArgumentException exceptionThrown = assertThrows(
+                IllegalArgumentException.class, () -> {
+                    transactionValidator.validateTransaction(
+                        LOCAL_ROUTING_NUM, AUTHED_ACCOUNT_NUM, transaction);
+                });
+
+            // Then
+            assertEquals("amount above limit", exceptionThrown.getMessage());
         }
     }
 
