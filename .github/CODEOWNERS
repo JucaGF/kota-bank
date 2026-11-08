@@ -1,0 +1,13 @@
+# Gerado do mapa da Kota. Não edite à mão: mude o mapa e gere de novo.
+* nadia@kota.example eduardo@kota.example
+/src/frontend/ larissa@kota.example priscila@kota.example
+/src/accounts/userservice/ rodrigo@kota.example camila@kota.example
+/src/accounts/contacts/ rodrigo@kota.example camila@kota.example
+/src/accounts/accounts-db/ rodrigo@kota.example camila@kota.example
+/src/ledger/ledgerwriter/ thiago@kota.example natalia@kota.example
+/src/ledger/balancereader/ thiago@kota.example natalia@kota.example
+/src/ledger/transactionhistory/ thiago@kota.example natalia@kota.example
+/src/ledger/ledger-db/ thiago@kota.example natalia@kota.example
+/src/loadgenerator/ nadia@kota.example eduardo@kota.example
+/src/ledgermonolith/ thiago@kota.example natalia@kota.example
+/docs/adr/ rodrigo@kota.example thiago@kota.example larissa@kota.example nadia@kota.example
