@@ -220,7 +220,7 @@ class BalanceReaderControllerTest {
     }
 
     @Test
-    @DisplayName("Given the cache throws an error for an authenticated user, return 500")
+    @DisplayName("Given the cache throws an error for an authenticated user, return 503")
     void getBalanceFailsWhenCacheThrowsError() throws Exception {
         // Given
         when(verifier.verify(TOKEN)).thenReturn(jwt);
@@ -233,7 +233,7 @@ class BalanceReaderControllerTest {
 
         // Then
         assertNotNull(actualResult);
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, actualResult.getStatusCode());
+        assertEquals(HttpStatus.SERVICE_UNAVAILABLE, actualResult.getStatusCode());
     }
 
 }
