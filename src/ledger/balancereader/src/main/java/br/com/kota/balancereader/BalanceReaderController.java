@@ -172,7 +172,7 @@ public final class BalanceReaderController {
         } catch (ExecutionException | UncheckedExecutionException e) {
             LOGGER.error("Cache error");
             return new ResponseEntity<>("cache error",
-                HttpStatus.INTERNAL_SERVER_ERROR);
+                HttpStatus.SERVICE_UNAVAILABLE);
         }
     }
 }
