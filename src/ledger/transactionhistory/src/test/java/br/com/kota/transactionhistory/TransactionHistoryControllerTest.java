@@ -173,7 +173,7 @@ class TransactionHistoryControllerTest {
     }
 
     @Test
-    @DisplayName("Given the user is authenticated but cannot access the account, return 401")
+    @DisplayName("Given the user is authenticated but cannot access the account, return 403")
     void getTransactionsFailsWhenAccountDoesNotMatchAuthenticatedUser() {
         // Given
         when(verifier.verify(TOKEN)).thenReturn(jwt);
@@ -185,7 +185,7 @@ class TransactionHistoryControllerTest {
 
         // Then
         assertNotNull(actualResult);
-        assertEquals(HttpStatus.UNAUTHORIZED, actualResult.getStatusCode());
+        assertEquals(HttpStatus.FORBIDDEN, actualResult.getStatusCode());
     }
 
     @Test
