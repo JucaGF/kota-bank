@@ -31,6 +31,8 @@ import static br.com.kota.ledgerwriter.ExceptionMessages.
         EXCEPTION_MESSAGE_SEND_TO_SELF;
 import static br.com.kota.ledgerwriter.ExceptionMessages.
         EXCEPTION_MESSAGE_INVALID_AMOUNT;
+import static br.com.kota.ledgerwriter.ExceptionMessages.
+        EXCEPTION_MESSAGE_AMOUNT_ABOVE_LIMIT;
 
 
 /**
@@ -45,6 +47,8 @@ public class TransactionValidator {
     private static final Pattern ACCT_REGEX = Pattern.compile("^[0-9]{10}$");
     // route numbers should be 9 digits between 0 and 9
     private static final Pattern ROUTE_REGEX = Pattern.compile("^[0-9]{9}$");
+    // R$ 10.000,00, em centavos.
+    private static final int AMOUNT_LIMIT = 1_000_000;
 
     private static final Logger LOGGER =
         LogManager.getLogger(TransactionValidator.class);
@@ -53,7 +57,7 @@ public class TransactionValidator {
      *   - Ensure sender is the same user authenticated by auth token
      *   - Ensure account and routing numbers are in the correct format
      *   - Ensure sender and receiver are different accounts
-     *   - Ensure amount is positive
+     *   - Ensure amount is positive and not above the limit
      *
      * @param authedAccount  the currently authenticated user account
      * @param transaction    the transaction object
@@ -99,6 +103,11 @@ public class TransactionValidator {
             LOGGER.error("Invalid transaction: Transaction amount invalid");
             throw new IllegalArgumentException(
                     EXCEPTION_MESSAGE_INVALID_AMOUNT);
+        }
+        if (amount > AMOUNT_LIMIT) {
+            LOGGER.error("Invalid transaction: Transaction amount above limit");
+            throw new IllegalArgumentException(
+                    EXCEPTION_MESSAGE_AMOUNT_ABOVE_LIMIT);
         }
     }
 }
