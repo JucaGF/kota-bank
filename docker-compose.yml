@@ -1,0 +1,201 @@
+# Sobe o banco inteiro na máquina, construindo cada serviço a partir do código.
+# Os valores de ambiente vêm dos manifestos Kubernetes de origem (ConfigMaps e env de cada
+# Deployment); cada bloco x- abaixo tem o nome do ConfigMap de onde veio.
+name: kota
+
+x-environment-config: &environment-config
+  LOCAL_ROUTING_NUM: "883745000"
+  PUB_KEY_PATH: /tmp/.ssh/publickey
+
+x-service-api-config: &service-api-config
+  TRANSACTIONS_API_ADDR: ledgerwriter:8080
+  BALANCES_API_ADDR: balancereader:8080
+  HISTORY_API_ADDR: transactionhistory:8080
+  CONTACTS_API_ADDR: contacts:8080
+  USERSERVICE_API_ADDR: userservice:8080
+
+x-demo-data-config: &demo-data-config
+  USE_DEMO_DATA: "True"
+  DEMO_LOGIN_USERNAME: &demo-usuario cliente.demo
+  DEMO_LOGIN_PASSWORD: &demo-senha kota-demo
+
+x-accounts-db-config: &accounts-db-config
+  ACCOUNTS_DB_URI: postgresql://accounts-admin:accounts-pwd@accounts-db:5432/accounts-db
+  POSTGRES_DB: accounts-db
+  POSTGRES_PASSWORD: accounts-pwd
+  POSTGRES_USER: accounts-admin
+
+x-ledger-db-config: &ledger-db-config
+  POSTGRES_DB: postgresdb
+  POSTGRES_PASSWORD: password
+  POSTGRES_USER: admin
+  SPRING_DATASOURCE_PASSWORD: password
+  SPRING_DATASOURCE_URL: jdbc:postgresql://ledger-db:5432/postgresdb
+  SPRING_DATASOURCE_USERNAME: admin
+
+x-servico: &servico
+  VERSION: v0.6.11
+  PORT: "8080"
+  LOG_LEVEL: info
+  ENABLE_TRACING: "false"
+  ENABLE_METRICS: "false"
+
+# O JVM_OPTS dos manifestos tem -Xmx512m e -XX:+UseCGroupMemoryLimitForHeap, que não existe no
+# Java 17. O teto aqui é 256m porque o jurado sobe tudo no Docker Desktop com a memória padrão.
+# Medido com 256m, logo depois do login: as três JVMs somam 0,8 a 0,9 GiB e os oito serviços,
+# 1,2 a 1,3 GiB; o perfil carga rodou 90 s sem falha. Se o balancereader ou o transactionhistory
+# derem OutOfMemoryError, suba este valor.
+x-java: &java
+  JAVA_TOOL_OPTIONS: -Xmx256m
+
+# Por TCP: enquanto carrega os dados iniciais, o Postgres só escuta no socket local.
+x-banco-saudavel: &banco-saudavel
+  test: ["CMD-SHELL", "pg_isready -h localhost -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+  interval: 3s
+  timeout: 5s
+  retries: 3
+  start_period: 600s
+
+services:
+  # Gera o par de chaves do JWT na primeira subida e o mantém no volume "chaves". Só o
+  # userservice assina tokens e monta "chaves"; os outros recebem só a pública, em "chave-publica".
+  jwt-chaves:
+    image: alpine:3.20
+    volumes:
+      - chaves:/chaves
+      - chave-publica:/chave-publica
+    command:
+      - sh
+      - -ec
+      - |
+        cd /chaves
+        if [ ! -f publickey ]; then
+          apk add --no-cache -q openssl
+          openssl genrsa -out privatekey.tmp 4096
+          openssl rsa -in privatekey.tmp -outform PEM -pubout -out publickey.tmp
+          mv privatekey.tmp privatekey
+          mv publickey.tmp publickey
+        fi
+        cp publickey /chave-publica/publickey
+
+  accounts-db:
+    build: src/accounts/accounts-db
+    environment:
+      <<: [*environment-config, *accounts-db-config, *demo-data-config]
+    volumes:
+      - accounts-db-dados:/var/lib/postgresql/data
+    healthcheck: *banco-saudavel
+
+  ledger-db:
+    build: src/ledger/ledger-db
+    environment:
+      <<: [*environment-config, *ledger-db-config, *demo-data-config]
+    volumes:
+      - ledger-db-dados:/var/lib/postgresql/data
+    healthcheck: *banco-saudavel
+
+  userservice:
+    build: src/accounts/userservice
+    environment:
+      <<: [*servico, *environment-config, *accounts-db-config]
+      TOKEN_EXPIRY_SECONDS: "3600"
+      PRIV_KEY_PATH: /tmp/.ssh/privatekey
+    volumes:
+      - chaves:/tmp/.ssh:ro
+    depends_on: &depende-de-accounts-db
+      jwt-chaves:
+        condition: service_completed_successfully
+      accounts-db:
+        condition: service_healthy
+
+  contacts:
+    build: src/accounts/contacts
+    environment:
+      <<: [*servico, *environment-config, *accounts-db-config]
+    volumes:
+      - chave-publica:/tmp/.ssh:ro
+    depends_on: *depende-de-accounts-db
+
+  ledgerwriter:
+    build:
+      context: .
+      dockerfile: src/ledger/ledgerwriter/Dockerfile
+    environment:
+      <<: [*servico, *java, *environment-config, *service-api-config, *ledger-db-config]
+    volumes:
+      - chave-publica:/tmp/.ssh:ro
+    depends_on: &depende-de-ledger-db
+      jwt-chaves:
+        condition: service_completed_successfully
+      ledger-db:
+        condition: service_healthy
+
+  balancereader:
+    build:
+      context: .
+      dockerfile: src/ledger/balancereader/Dockerfile
+    environment:
+      <<: [*servico, *java, *environment-config, *ledger-db-config]
+      POLL_MS: "100"
+      CACHE_SIZE: "1000000"
+    volumes:
+      - chave-publica:/tmp/.ssh:ro
+    depends_on: *depende-de-ledger-db
+
+  transactionhistory:
+    build:
+      context: .
+      dockerfile: src/ledger/transactionhistory/Dockerfile
+    environment:
+      <<: [*servico, *java, *environment-config, *ledger-db-config]
+      POLL_MS: "100"
+      CACHE_SIZE: "1000"
+      CACHE_MINUTES: "60"
+      HISTORY_LIMIT: "100"
+    volumes:
+      - chave-publica:/tmp/.ssh:ro
+    depends_on: *depende-de-ledger-db
+
+  frontend:
+    build: src/frontend
+    environment:
+      <<: [*servico, *environment-config, *service-api-config]
+      SCHEME: http
+      DEFAULT_USERNAME: *demo-usuario
+      DEFAULT_PASSWORD: *demo-senha
+      BANK_NAME: Kota
+    # Só esta máquina abre o site: a tela de login já vem preenchida com o usuário de demo.
+    ports:
+      - "127.0.0.1:${KOTA_PORTA:-8080}:8080"
+    volumes:
+      - chave-publica:/tmp/.ssh:ro
+    depends_on:
+      jwt-chaves:
+        condition: service_completed_successfully
+      userservice:
+        condition: service_started
+      contacts:
+        condition: service_started
+      ledgerwriter:
+        condition: service_started
+      balancereader:
+        condition: service_started
+      transactionhistory:
+        condition: service_started
+
+  # Só sobe com: docker compose --profile carga up
+  loadgenerator:
+    build: src/loadgenerator
+    profiles: ["carga"]
+    environment:
+      FRONTEND_ADDR: frontend:8080
+      USERS: "5"
+      LOG_LEVEL: error
+    depends_on:
+      - frontend
+
+volumes:
+  chaves:
+  chave-publica:
+  accounts-db-dados:
+  ledger-db-dados:
