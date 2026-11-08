@@ -177,9 +177,9 @@ public final class TransactionHistoryController {
             // Check that the authenticated user can access this account.
             if (!accountId.equals(jwt.getClaim("acct").asString())) {
                 LOGGER.error("Failed to retrieve account transactions: "
-                    + "not authorized");
-                return new ResponseEntity<>("not authorized",
-                                                  HttpStatus.UNAUTHORIZED);
+                    + "forbidden");
+                return new ResponseEntity<>("forbidden",
+                                                  HttpStatus.FORBIDDEN);
             }
 
             // Load from cache
